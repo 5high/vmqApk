@@ -93,7 +93,7 @@ public class NeNotificationService2 extends NotificationListenerService {
                     String t = String.valueOf(new Date().getTime());
                     String sign = md5(t + key);
 
-                    final String url = "http://" + host + "/appHeart?t=" + t + "&sign=" + sign;
+                    final String url = "http://" + host + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign;
                     Request request = new Request.Builder().url(url).method("GET", null).build();
                     Call call = Utils.getOkHttpClient().newCall(request);
                     call.enqueue(new Callback() {
@@ -295,7 +295,7 @@ public class NeNotificationService2 extends NotificationListenerService {
 
         String t = String.valueOf(new Date().getTime());
         String sign = md5(type + "" + price + t + key);
-        final String url = "http://" + host + "/appPush?t=" + t + "&type=" + type + "&price=" + price + "&sign=" + sign;
+        final String url = "http://" + host + "/appPush?key=" + key + "&t=" + t + "&type=" + type + "&price=" + price + "&sign=" + sign;
         Log.d(TAG, "onResponse  push: 开始:" + url);
         Request request = new Request.Builder().url(url).method("GET", null).build();
         Call call = Utils.getOkHttpClient().newCall(request);

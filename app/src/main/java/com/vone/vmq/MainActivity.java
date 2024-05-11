@@ -126,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
                 String t = String.valueOf(new Date().getTime());
                 String sign = md5(t + tmp[1]);
 
-                Request request = new Request.Builder().url("http://" + tmp[0] + "/appHeart?t=" + t + "&sign=" + sign).method("GET", null).build();
+                Request request = new Request.Builder().url("http://" + tmp[0] + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign).method("GET", null).build();
                 Call call = Utils.getOkHttpClient().newCall(request);
                 call.enqueue(new Callback() {
                     @Override
@@ -176,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
         String t = String.valueOf(new Date().getTime());
         String sign = md5(t + key);
 
-        Request request = new Request.Builder().url("http://" + host + "/appHeart?t=" + t + "&sign=" + sign).method("GET", null).build();
+        Request request = new Request.Builder().url("http://" + host + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign).method("GET", null).build();
         Call call = Utils.getOkHttpClient().newCall(request);
         call.enqueue(new Callback() {
             @Override
@@ -191,12 +191,13 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onResponse(Call call, final Response response) throws IOException {
+                final String resbody = response.body().string();
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
                         try {
                             // 为什么每一个response都 try catch了，因为response.body有可能为空
-                            Toast.makeText(MainActivity.this, "心跳返回：" + response.body().string(), Toast.LENGTH_LONG).show();
+                            Toast.makeText(MainActivity.this, "心跳返回：" + resbody, Toast.LENGTH_LONG).show();
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -335,7 +336,7 @@ public class MainActivity extends AppCompatActivity {
             String t = String.valueOf(new Date().getTime());
             String sign = md5(t + tmp[1]);
 
-            Request request = new Request.Builder().url("http://" + tmp[0] + "/appHeart?t=" + t + "&sign=" + sign).method("GET", null).build();
+            Request request = new Request.Builder().url("http://" + tmp[0] + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign).method("GET", null).build();
             Call call = Utils.getOkHttpClient().newCall(request);
             call.enqueue(new Callback() {
                 @Override
