@@ -91,64 +91,26 @@ public class ForegroundServer extends Service {
         }
         try {
             JSONObject jsonObject = new JSONObject(extraStr);
-            final String url = jsonObject.optString("url");
-            if (url == null) {
-                return;
-            }
+            // 显示推送页面
             if (jsonObject.optBoolean("show", true)) {
                 startLockActivity(this.getString(R.string.app_is_post));
             }
-            tryPushByUrl(url, jsonObject.optInt("try_count", 1));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void tryPushByUrl(final String url, final int count) {
-        if (count <= 0) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    NeNotificationService2.exitForeground(App.getContext());
-                }
-            });
-            return;
-        }
-        // 进行一个短暂的延迟再通知过去
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                Request request = new Request.Builder().url(url).method("GET", null).build();
-                Call call = Utils.getOkHttpClient().newCall(request);
-                call.enqueue(new Callback() {
+            if (jsonObject.optBoolean("heart", false)) {
+                SendRequestServer.getInstance().sendHeart(this, new SendRequestServer.HeartCallback() {
                     @Override
-                    public void onFailure(Call call, IOException e) {
-                        Log.d("ForegroundServer", "onResponse  push: 请求失败");
-                        tryPushByUrl(url, count - 1);
+                    public void onFailure(boolean isInit) {
+
                     }
 
                     @Override
-                    public void onResponse(Call call, Response response) throws IOException {
-                        try {
-                            Log.d("ForegroundServer", "onResponse  push: " + response.body().string());
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        } finally {
-                            if (!response.isSuccessful()) {
-                                tryPushByUrl(url, count - 1);
-                            } else {
-                                handler.post(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        NeNotificationService2.exitForeground(App.getContext());
-                                    }
-                                });
-                            }
-                        }
+                    public void onResponse(Response response) {
+
                     }
                 });
             }
-        }, MIN_SHOW_TIME);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     /**

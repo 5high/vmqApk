@@ -1,6 +1,7 @@
 package com.vone.vmq;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -10,13 +11,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
@@ -29,38 +27,34 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.zxing.activity.CaptureActivity;
+import com.vone.qrcode.BuildConfig;
 import com.vone.qrcode.R;
 import com.vone.vmq.util.Constant;
+import com.vone.vmq.util.PreUtils;
 
-import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Date;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.Request;
-import okhttp3.Response;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 public class MainActivity extends AppCompatActivity {
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView txthost;
+    private TextView txt_id;
     private TextView txtkey;
 
-    private boolean isOk = false;
-    private static String TAG = "MainActivity";
 
-    private static String host;
-    private static String key;
     int id = 0;
 
+    @SuppressLint("SetTextI18n")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
         txthost = (TextView) findViewById(R.id.txt_host);
+        txt_id = (TextView) findViewById(R.id.txt_id);
         txtkey = (TextView) findViewById(R.id.txt_key);
 
         //检测通知使用权是否启用
@@ -75,16 +69,18 @@ public class MainActivity extends AppCompatActivity {
             toggleNotificationListenerService(this);
         }
         //读入保存的配置数据并显示
-        SharedPreferences read = getSharedPreferences("vone", MODE_PRIVATE);
-        host = read.getString("host", "");
-        key = read.getString("key", "");
-
-        if (host != null && key != null && host != "" && key != "") {
-            txthost.setText(" 通知地址：" + host);
-            txtkey.setText(" 通讯密钥：" + key);
-            isOk = true;
+        String configStr = PreUtils.get(this, Constant.SERVER_CONFIG, "");
+        if (!TextUtils.isEmpty(configStr)) {
+            try {
+                JSONObject configJson = new JSONObject(configStr);
+                txthost.setText(" 通知地址：" + configJson.optString("url"));
+                txt_id.setText(" 账户ID号：" + configJson.optString("appId", "兼容旧版(无账户ID)"));
+                txtkey.setText(" 通讯密钥：" + configJson.optString("key"));
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
         }
-        Toast.makeText(MainActivity.this, "v免签开源免费免签系统 v1.8.1", Toast.LENGTH_SHORT).show();
+        Toast.makeText(MainActivity.this, "v免签开源免费免签系统 " + BuildConfig.VERSION_NAME, Toast.LENGTH_SHORT).show();
     }
 
     //扫码配置
@@ -116,95 +112,16 @@ public class MainActivity extends AppCompatActivity {
 
             public void onClick(DialogInterface dialog, int which) {
                 String scanResult = inputServer.getText().toString();
-
-                String[] tmp = scanResult.split("/");
-                if (tmp.length != 2) {
-                    Toast.makeText(MainActivity.this, "数据错误，请您输入网站上显示的配置数据!", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-
-                String t = String.valueOf(new Date().getTime());
-                String sign = md5(t + tmp[1]);
-
-                Request request = new Request.Builder().url("http://" + tmp[0] + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign).method("GET", null).build();
-                Call call = Utils.getOkHttpClient().newCall(request);
-                call.enqueue(new Callback() {
-                    @Override
-                    public void onFailure(Call call, IOException e) {
-
-                    }
-
-                    @Override
-                    public void onResponse(Call call, Response response) throws IOException {
-                        try {
-                            Log.d(TAG, "onResponse: " + response.body().string());
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                        isOk = true;
-                    }
-                });
-                if (tmp[0].indexOf("localhost") >= 0) {
-                    Toast.makeText(MainActivity.this, "配置信息错误，本机调试请访问 本机局域网IP:8080(如192.168.1.101:8080) 获取配置信息进行配置!", Toast.LENGTH_LONG).show();
-
-                    return;
-                }
-                //将扫描出的信息显示出来
-                txthost.setText(" 通知地址：" + tmp[0]);
-                txtkey.setText(" 通讯密钥：" + tmp[1]);
-                host = tmp[0];
-                key = tmp[1];
-
-                SharedPreferences.Editor editor = getSharedPreferences("vone", MODE_PRIVATE).edit();
-                editor.putString("host", host);
-                editor.putString("key", key);
-                editor.commit();
-
+                saveConfig(scanResult);
             }
         });
         builder.show();
-
     }
 
     //检测心跳
     public void doStart(View view) {
-        if (!isOk) {
-            Toast.makeText(MainActivity.this, "请您先配置!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        String t = String.valueOf(new Date().getTime());
-        String sign = md5(t + key);
-
-        Request request = new Request.Builder().url("http://" + host + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign).method("GET", null).build();
-        Call call = Utils.getOkHttpClient().newCall(request);
-        call.enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(MainActivity.this, "心跳状态错误，请检查配置是否正确!", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-
-            @Override
-            public void onResponse(Call call, final Response response) throws IOException {
-                final String resbody = response.body().string();
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            // 为什么每一个response都 try catch了，因为response.body有可能为空
-                            Toast.makeText(MainActivity.this, "心跳返回：" + resbody, Toast.LENGTH_LONG).show();
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
-            }
-        });
+        // 发送一次心跳
+        SendRequestServer.getInstance().sendHeart(this, null);
     }
 
     //检测监听
@@ -296,29 +213,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public static String md5(String string) {
-        if (TextUtils.isEmpty(string)) {
-            return "";
-        }
-        MessageDigest md5 = null;
-        try {
-            md5 = MessageDigest.getInstance("MD5");
-            byte[] bytes = md5.digest(string.getBytes());
-            StringBuilder result = new StringBuilder();
-            for (byte b : bytes) {
-                String temp = Integer.toHexString(b & 0xff);
-                if (temp.length() == 1) {
-                    temp = "0" + temp;
-                }
-                result.append(temp);
-            }
-            return result.toString();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-        return "";
-    }
-
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -327,45 +221,59 @@ public class MainActivity extends AppCompatActivity {
             Bundle bundle = data.getExtras();
             String scanResult = bundle.getString(Constant.INTENT_EXTRA_KEY_QR_SCAN);
 
-            String[] tmp = scanResult.split("/");
+            if (TextUtils.isEmpty(scanResult)) {
+                Toast.makeText(MainActivity.this, "扫码错误，请您扫描网站上显示的二维码!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            saveConfig(scanResult);
+        }
+    }
+
+    /**
+     * 统一的保存配置信息的位置
+     *
+     * @param input
+     */
+    @SuppressLint("SetTextI18n")
+    private void saveConfig(String input) {
+        Log.d("MainActivity", input);
+        JSONObject configJson = new JSONObject();
+        if (input.startsWith("http")) {
+            try {
+                URL testUrl = new URL(input);
+
+                configJson.put("url", testUrl.getProtocol() + "://" + testUrl.getHost());
+
+                String[] tmp = testUrl.getPath().substring("/".length()).split("/");
+                if (tmp.length != 2) {
+                    Toast.makeText(MainActivity.this, "二维码错误，请您扫描网站上显示的二维码!", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                configJson.put("key", tmp[0]);
+                configJson.put("appId", tmp[1]);
+            } catch (MalformedURLException | JSONException e) {
+                e.printStackTrace();
+            }
+            PreUtils.put(this, Constant.CONFIG_V2, true);
+        } else {  // 兼容旧版 vmqphp
+            String[] tmp = input.split("/");
             if (tmp.length != 2) {
                 Toast.makeText(MainActivity.this, "二维码错误，请您扫描网站上显示的二维码!", Toast.LENGTH_SHORT).show();
                 return;
             }
-
-            String t = String.valueOf(new Date().getTime());
-            String sign = md5(t + tmp[1]);
-
-            Request request = new Request.Builder().url("http://" + tmp[0] + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign).method("GET", null).build();
-            Call call = Utils.getOkHttpClient().newCall(request);
-            call.enqueue(new Callback() {
-                @Override
-                public void onFailure(Call call, IOException e) {
-
-                }
-
-                @Override
-                public void onResponse(Call call, Response response) throws IOException {
-                    try {
-                        Log.d(TAG, "onResponse: " + response.body().string());
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                    isOk = true;
-                }
-            });
-
-            //将扫描出的信息显示出来
-            txthost.setText(" 通知地址：" + tmp[0]);
-            txtkey.setText(" 通讯密钥：" + tmp[1]);
-            host = tmp[0];
-            key = tmp[1];
-
-            SharedPreferences.Editor editor = getSharedPreferences("vone", MODE_PRIVATE).edit();
-            editor.putString("host", host);
-            editor.putString("key", key);
-            editor.commit();
+            try {
+                configJson.put("url", tmp[0]);
+                configJson.put("key", tmp[1]);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            PreUtils.put(this, Constant.CONFIG_V2, false);
         }
+        txthost.setText(" 通知地址：" + configJson.optString("url"));
+        txt_id.setText(" 账户ID号：" + configJson.optString("appId", "兼容旧版(无账户ID)"));
+        txtkey.setText(" 通讯密钥：" + configJson.optString("key"));
+
+        PreUtils.put(this, Constant.SERVER_CONFIG, configJson.toString());
     }
 
     @Override

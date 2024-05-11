@@ -12,21 +12,35 @@
     <include layout="@layout/toolbar_main" />
 
     <TextView
-        android:paddingTop="20dp"
-        android:paddingBottom="10dp"
-
         android:id="@+id/txt_host"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
 
+        android:layout_height="wrap_content"
         android:baselineAligned="false"
+        android:gravity="left"
+        android:paddingLeft="20dp"
+        android:paddingTop="20dp"
+
+        android:paddingBottom="10dp"
         android:text=" 通知地址：请扫码配置" />
 
     <TextView
-        android:paddingBottom="20dp"
-        android:id="@+id/txt_key"
-        android:layout_width="fill_parent"
+        android:id="@+id/txt_id"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="left"
+        android:paddingBottom="10dp"
+        android:paddingLeft="20dp"
+        android:text=" 账户ID号：请扫码配置" />
+
+
+    <TextView
+        android:id="@+id/txt_key"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="left"
+        android:paddingLeft="20dp"
+        android:paddingBottom="20dp"
         android:text=" 通讯密钥：请扫码配置" />
 
 
@@ -37,6 +51,7 @@
         android:layout_gravity="center_horizontal"
         android:onClick="startQrCode"
         android:text="扫码配置" />
+
     <Button
         android:id="@+id/btn_input"
         android:layout_width="fill_parent"
@@ -44,6 +59,7 @@
         android:layout_gravity="center_horizontal"
         android:onClick="doInput"
         android:text="手动配置" />
+
     <Button
         android:id="@+id/btn_start"
         android:layout_width="fill_parent"
@@ -51,6 +67,7 @@
         android:layout_gravity="center_horizontal"
         android:onClick="doStart"
         android:text="检测心跳" />
+
     <Button
         android:id="@+id/btn_checkpush"
         android:layout_width="fill_parent"

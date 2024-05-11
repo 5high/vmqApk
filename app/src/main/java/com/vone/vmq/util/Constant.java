@@ -10,4 +10,9 @@ public class Constant {
     public static final int REQ_PERM_EXTERNAL_STORAGE = 11004; // 读写文件
 
     public static final String INTENT_EXTRA_KEY_QR_SCAN = "qr_scan_result";
+
+    // 配置存储字符串
+    public static final String SERVER_CONFIG = "server_config";
+    // 配置是否为新版本，新版可以减少心跳达到 省电效果，但旧版必须保持心跳
+    public static final String CONFIG_V2 = "is_new_version_v2";
 }

@@ -149,23 +149,21 @@ class Utils {
         }
     }
 
-    static void sendNotifyMessage(Context context, String title, String text, int type) {
-        if (type == 1) {
-            String channelId = "MessageNotify";
-            int channelLevel = -1;
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                channelLevel = NotificationManager.IMPORTANCE_HIGH;
-            }
-            int id = (channelId + System.currentTimeMillis()).hashCode();
-            String showTvText = String.format("%s\n%s", title, text);
-            Intent intent = new Intent(context, MainActivity.class);
-            intent.putExtra(GET_MESSAGE_KEY, showTvText);
-            intent.putExtra(GET_SHOW_ACTIVITY_TYPE, type);
-
-            sendNotify(context, channelId, "remote message notify",
-                    channelLevel, Notification.PRIORITY_HIGH, id,
-                    title, text, intent);
+    static void sendNotifyMessage(Context context, String title, String text) {
+        String channelId = "MessageNotify";
+        int channelLevel = -1;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            channelLevel = NotificationManager.IMPORTANCE_HIGH;
         }
+        int id = (channelId + System.currentTimeMillis()).hashCode();
+        String showTvText = String.format("%s\n%s", title, text);
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.putExtra(GET_MESSAGE_KEY, showTvText);
+        // intent.putExtra(GET_SHOW_ACTIVITY_TYPE, type);
+
+        sendNotify(context, channelId, "remote message notify",
+                channelLevel, Notification.PRIORITY_HIGH, id,
+                title, text, intent);
     }
 
     static void sendBatteryNotify(Context context) {

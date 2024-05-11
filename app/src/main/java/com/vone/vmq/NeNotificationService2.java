@@ -1,131 +1,87 @@
 package com.vone.vmq;
 
-import android.annotation.SuppressLint;
 import android.app.Notification;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.support.v4.app.NotificationCompat;
-import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
 import com.vone.qrcode.R;
+import com.vone.vmq.util.PreUtils;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.List;
 
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.Request;
 import okhttp3.Response;
 
 public class NeNotificationService2 extends NotificationListenerService {
     private static String TAG = "NeNotificationService2";
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private String host = "";
-    private String key = "";
     private Thread newThread = null;
-    private PowerManager.WakeLock mWakeLock = null;
     public static boolean isRunning;
-
-    //申请设备电源锁
-    @SuppressLint("InvalidWakeLockTag")
-    public void acquireWakeLock(final Context context) {
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (null == mWakeLock) {
-                    PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-                    if (pm != null) {
-                        mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "WakeLock");
-                    }
-                }
-                if (null != mWakeLock) {
-                    mWakeLock.acquire(5000);
-                }
-            }
-        });
-
-    }
-
-    //释放设备电源锁
-    public void releaseWakeLock() {
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (null != mWakeLock) {
-                    mWakeLock.release();
-                    mWakeLock = null;
-                }
-            }
-        });
-    }
+    private final NetworkReceiver netWorkReceiver = new NetworkReceiver();
 
     //心跳进程
     public void initAppHeart() {
-        Log.d(TAG, "开始启动心跳线程");
-        newThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Log.d(TAG, "心跳线程启动！");
-                while (isRunning && newThread == Thread.currentThread()) {
-                    SharedPreferences read = getSharedPreferences("vone", MODE_PRIVATE);
-                    host = read.getString("host", "");
-                    key = read.getString("key", "");
+        if (PreUtils.get(App.getContext(), com.vone.vmq.util.Constant.CONFIG_V2, false)) {
+            // 新版不再使用心跳达到省电效果
+            if (newThread != null && !newThread.isInterrupted()) {
+                newThread.interrupt();
+                newThread = null;
+            }
+        } else if (newThread == null) {
+            // 开启心跳线程, 判断版本，兼容旧版本的心跳线程
+            Log.d(TAG, "开始启动心跳线程");
+            newThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    Log.d(TAG, "心跳线程启动！"); // foregroundHeart(url);
+                    while (isRunning && newThread == Thread.currentThread()
+                            && !PreUtils.get(App.getContext(), com.vone.vmq.util.Constant.CONFIG_V2, false)) {
+                        // 如果网络状态处于未连接，不心跳
+                        if (SendRequestServer.getInstance().isNetConnection(App.getContext())) {
+                            SendRequestServer.getInstance().sendHeart(App.getContext(), new SendRequestServer.HeartCallback() {
+                                @Override
+                                public void onFailure(boolean isInit) {
+                                    if (isInit) {
+                                        // 如果尚未初始化，不进行心跳重试
+                                        foregroundHeart();
+                                    }
+                                }
 
-                    //这里写入子线程需要做的工作
-                    String t = String.valueOf(new Date().getTime());
-                    String sign = md5(t + key);
-
-                    final String url = "http://" + host + "/appHeart?key=" + key + "&t=" + t + "&sign=" + sign;
-                    Request request = new Request.Builder().url(url).method("GET", null).build();
-                    Call call = Utils.getOkHttpClient().newCall(request);
-                    call.enqueue(new Callback() {
-                        @Override
-                        public void onFailure(Call call, IOException e) {
-                            // final String error = e.getMessage();
-                            // Toast.makeText(getApplicationContext(), "心跳状态错误，请检查配置是否正确!" + error, Toast.LENGTH_LONG).show();
-                            foregroundHeart(url);
+                                @Override
+                                public void onResponse(Response response) {
+                                    if (!response.isSuccessful()) {
+                                        foregroundHeart();
+                                    }
+                                }
+                            });
                         }
-
-                        //请求成功执行的方法
-                        @Override
-                        public void onResponse(Call call, Response response) throws IOException {
-                            try {
-                                Log.d(TAG, "onResponse heard: " + response.body().string());
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                            if (!response.isSuccessful()) {
-                                foregroundHeart(url);
-                            }
+                        try {
+                            Thread.sleep(30 * 1000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
                         }
-                    });
-                    try {
-                        Thread.sleep(30 * 1000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
                     }
                 }
-            }
-        });
-        newThread.start(); //启动线程
+            });
+            newThread.start(); //启动线程
+        }
     }
 
 
@@ -139,9 +95,6 @@ public class NeNotificationService2 extends NotificationListenerService {
             Log.d(TAG, "群组摘要通知，忽略");
             return;
         }
-        SharedPreferences read = getSharedPreferences("vone", MODE_PRIVATE);
-        host = read.getString("host", "");
-        key = read.getString("key", "");
 
         Notification notification = sbn.getNotification();
         String pkg = sbn.getPackageName();
@@ -235,14 +188,20 @@ public class NeNotificationService2 extends NotificationListenerService {
     @Override
     public void onListenerConnected() {
         isRunning = true;
-        //开启心跳线程
-        initAppHeart();
-
         handler.post(new Runnable() {
             public void run() {
                 Toast.makeText(getApplicationContext(), "监听服务开启成功！", Toast.LENGTH_SHORT).show();
             }
         });
+
+        //注册网络状态监听广播
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        filter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
+        filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+        registerReceiver(netWorkReceiver, filter);
+        // 监听此类信息进行心跳通知
+        registerHomeBroad();
     }
 
     @Override
@@ -253,6 +212,18 @@ public class NeNotificationService2 extends NotificationListenerService {
             newThread.interrupt();
         }
         newThread = null;
+        // 取消广播监听状态
+        unregisterReceiver(netWorkReceiver);
+        unregisterReceiver(sysBoardReceiver);
+    }
+
+    private void registerHomeBroad() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_BATTERY_CHANGED);
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_USER_PRESENT);
+        registerReceiver(sysBoardReceiver, filter);
     }
 
     private void writeNotifyToFile(StatusBarNotification sbn) {
@@ -286,49 +257,21 @@ public class NeNotificationService2 extends NotificationListenerService {
      * 通知服务器收款到账
      */
     public void appPush(int type, double price) {
-        acquireWakeLock(this);
-        SharedPreferences read = getSharedPreferences("vone", MODE_PRIVATE);
-        host = read.getString("host", "");
-        key = read.getString("key", "");
-
-        Log.d(TAG, "onResponse  push: 开始:" + type + "  " + price);
-
-        String t = String.valueOf(new Date().getTime());
-        String sign = md5(type + "" + price + t + key);
-        final String url = "http://" + host + "/appPush?key=" + key + "&t=" + t + "&type=" + type + "&price=" + price + "&sign=" + sign;
-        Log.d(TAG, "onResponse  push: 开始:" + url);
-        Request request = new Request.Builder().url(url).method("GET", null).build();
-        Call call = Utils.getOkHttpClient().newCall(request);
-        call.enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                Log.d(TAG, "onResponse  push: 请求失败");
-                foregroundPost(url + "&force_push=true");
-                releaseWakeLock();
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                try {
-                    Log.d(TAG, "onResponse  push: " + response.body().string());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                // 如果返回状态不是成功的。同样要回调
-                if (!response.isSuccessful()) {
-                    foregroundPost(url + "&force_push=true");
-                }
-                releaseWakeLock();
-            }
-        });
+        initAppHeart();
+        PushBean pushBean = new PushBean(
+                System.currentTimeMillis(),
+                price,
+                type
+        );
+        SendRequestServer.getInstance().addPushBean(pushBean);
     }
 
-    private void foregroundHeart(String url) {
+    private void foregroundHeart() {
         final Context context = NeNotificationService2.this;
         if (isRunning) {
             final JSONObject extraJson = new JSONObject();
             try {
-                extraJson.put("url", url);
+                extraJson.put("heart", true);
                 extraJson.put("show", false);
             } catch (JSONException jsonException) {
                 jsonException.printStackTrace();
@@ -339,30 +282,6 @@ public class NeNotificationService2 extends NotificationListenerService {
                     enterForeground(context,
                             context.getString(R.string.app_name),
                             context.getString(R.string.app_is_heart), extraJson.toString());
-                }
-            });
-        }
-    }
-
-    /**
-     * 当通知失败的时候，前台强制通知
-     */
-    private void foregroundPost(String url) {
-        final Context context = NeNotificationService2.this;
-        if (isRunning) {
-            final JSONObject extraJson = new JSONObject();
-            try {
-                extraJson.put("url", url);
-                extraJson.put("try_count", 5);
-            } catch (JSONException jsonException) {
-                jsonException.printStackTrace();
-            }
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    enterForeground(context,
-                            context.getString(R.string.app_name),
-                            context.getString(R.string.app_is_post), extraJson.toString());
                 }
             });
         }
@@ -409,27 +328,25 @@ public class NeNotificationService2 extends NotificationListenerService {
         }
     }
 
-    public static String md5(String string) {
-        if (TextUtils.isEmpty(string)) {
-            return "";
-        }
-        MessageDigest md5 = null;
-        try {
-            md5 = MessageDigest.getInstance("MD5");
-            byte[] bytes = md5.digest(string.getBytes());
-            StringBuilder result = new StringBuilder();
-            for (byte b : bytes) {
-                String temp = Integer.toHexString(b & 0xff);
-                if (temp.length() == 1) {
-                    temp = "0" + temp;
-                }
-                result.append(temp);
+
+    private final BroadcastReceiver sysBoardReceiver = new BroadcastReceiver() {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) {
+                Log.i(TAG, "receive bettery change action");
+                SendRequestServer.getInstance().sendHeart(context);
+            } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                Log.i(TAG, "receive screen off action");
+                SendRequestServer.getInstance().sendHeart(context);
+            } else if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                Log.i(TAG, "receive screen on action");
+                SendRequestServer.getInstance().sendHeart(context);
+            } else if (Intent.ACTION_USER_PRESENT.equals(intent.getAction())) {
+                Log.i(TAG, "receive user presend action");
+                SendRequestServer.getInstance().sendHeart(context);
             }
-            return result.toString();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
         }
-        return "";
-    }
+    };
 
 }
